@@ -39,6 +39,8 @@ class AutomationUI:
         self.main_window.attributes("-topmost", True)
         self.firefox_path_var = tk.StringVar()
         self.firefox_path_var.set("例如：D:/Software/Mozilla Firefox/firefox.exe")
+        self.mode_var = tk.IntVar()
+        self.mode_var.set(0)
 
         l1 = tk.Label(self.main_window, text="1、安装Firefox浏览器，点我进行下载，里面有卸载软件，完成学习后可以卸载。",
                       font=("宋体", 12), fg="blue", cursor="hand2")
@@ -52,7 +54,7 @@ class AutomationUI:
         l3.place(x=35, y=60)
         l4 = tk.Label(self.main_window, textvariable=self.firefox_path_var, font=("宋体", 12), background="white")
         l4.place(x=140, y=105)
-        l5 = tk.Label(self.main_window, text="4、输入账号密码并登陆，成功进入首页后点击“启动脚本”。", font=("宋体", 12))
+        l5 = tk.Label(self.main_window, text="4、输入账号密码并登陆，成功进入首页后，选择合适的模式，再点击“启动脚本”。", font=("宋体", 12))
         l5.place(x=35, y=150)
         l6 = tk.Label(self.main_window, text="5、启动成功后，尽量不要操作浏览器，并留意弹窗提示和下方的日志信息!", font=("宋体", 12))
         l6.place(x=35, y=210)
@@ -64,13 +66,12 @@ class AutomationUI:
         l8.bind("<Button-1>", self.open_link_developer_info)
         l8.bind("<Enter>", self.show_developer_info)
         l8.bind("<Leave>", self.hide_developer_info)
-
-        self.log_area = tk.Text(self.main_window, height=7, width=68, background="white", font=("宋体", 10), fg="green")
-        self.log_area.place(x=115, y=250)
-        self.ui_func()
         # 个人主页
         self.l9 = tk.Label(self.main_window, font=("宋体", 12), fg="blue")
         self.l9.place(x=63, y=360)
+
+        self.ui_func()
+        self.mode_select()
 
     def ui_func(self):
         b1 = tk.Button(self.main_window, text="选择浏览器", font=("宋体", 11), command=self.select_friefox_browser_path)
@@ -81,7 +82,16 @@ class AutomationUI:
         b3.place(x=35, y=180)
         b4 = tk.Button(self.main_window, text="停止脚本", font=("宋体", 11), command=self.stop_script)
         b4.place(x=150, y=180)
+        self.log_area = tk.Text(self.main_window, height=7, width=68, background="white", font=("宋体", 10), fg="green")
+        self.log_area.place(x=115, y=250)
         self.show_log_area("动态显示日志信息。")
+
+        # 模式
+        self.normal_mode_radio = tk.Radiobutton(self.main_window, text="正常模式", variable=self.mode_var, value=0,command=self.mode_select, activebackground="yellow")
+        self.normal_mode_radio.place(x=250, y=180)
+        self.fast_mode_radio = tk.Radiobutton(self.main_window, text="快速模式:建议没时间再用！", variable=self.mode_var, value=1,command=self.mode_select, activebackground="yellow")
+        self.fast_mode_radio.place(x=330, y=180)
+
 
     def open_link_download(self, event):
         webbrowser.open_new("https://www.123pan.com/s/ydsAjv-5Ge03")
@@ -117,7 +127,7 @@ class AutomationUI:
             self.logger.error("未启动浏览器！")
             msgBox = tk.messagebox.showerror("错误", "请先启动浏览器！")
         elif self.firefox_browser.web.current_url == "http://xfks-study.gdsf.gov.cn/study/index":
-            base_func_instance = Base_Func(self.firefox_browser.web, self.logger, self, self.main_window)
+            base_func_instance = Base_Func(self.firefox_browser.web, self.logger, self, self.main_window, self.mode_var.get())
             base_func_instance.frist_enter_index_page()
         else:
             self.show_log_area("未进入首页！")
@@ -131,6 +141,16 @@ class AutomationUI:
             msgBox = messagebox.showinfo("提示", "脚本已停止！")
         self.main_window.destroy()
         sys.exit()
+
+    def mode_select(self):
+        if self.mode_var.get() == 0:
+            self.show_log_area("选择正常模式。")
+            self.logger.info("选择正常模式。")
+        else:
+            self.show_log_area("选择快速模式。")
+            self.logger.warning("选择快速模式。")
+            msgBox = messagebox.showwarning("警告", "快速模式下，直接向服务器发送请求，能瞬间完成一篇，但服务器会有时间记录，所以建议实在没时间再用！")
+            self.mode_var.set(1)
 
     # 动态监控日志信息
     def show_log_area(self, message):

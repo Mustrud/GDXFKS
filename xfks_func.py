@@ -10,11 +10,12 @@ from selenium.common.exceptions import TimeoutException
 from xfks_element import Element_Process
 
 class Base_Func:
-    def __init__(self, web, logger, log_area,main_window):
+    def __init__(self, web, logger, log_area,main_window,start_mode):
         self.web = web
         self.logger = logger
         self.log_area = log_area
         self.main_window = main_window
+        self.start_mode = start_mode
         self.element_process = None
         self.total_progress = None
 
@@ -30,7 +31,7 @@ class Base_Func:
 
     # 检查总进度
     def check_total_progress(self):
-        pages = Pages(self.web, self.logger, self.log_area, self.element_process, self.main_window,self.total_progress)
+        pages = Pages(self.web, self.logger, self.log_area, self.element_process, self.main_window,self.total_progress, self.start_mode)
         if self.total_progress == "100%":
             pages.index_page()
         else:
@@ -39,13 +40,14 @@ class Base_Func:
             pages.index_page()
 
 class Pages:
-    def __init__(self, web, logger, log_area,element_process,main_window,total_progress):
+    def __init__(self, web, logger, log_area,element_process,main_window,total_progress, start_mode):
         self.web = web
         self.logger = logger
         self.log_area = log_area
         self.element_process = element_process
         self.main_window = main_window
         self.total_progress = total_progress
+        self.start_mode = start_mode
         self.total_retries = 0
         self.max_quit_retries = 3
         self.li_elements = None
@@ -124,22 +126,26 @@ class Pages:
             if title_elements and href_elements and title_elements[0].text.strip() == "" and href_elements[0].get_attribute("href"):
                 self.log_area.show_log_area(f'当前符合"无分值"且有"跳转链接"的元素为:{href_elements[0].text}')
                 self.logger.info(f'当前符合"无分值"且有"跳转链接"的元素为:{href_elements[0].text}')
-                self.button_click(li, self.chapter_page, '点击"chapter_button"按钮。')
+                self.button_click(li, self.select_mode_chapter_page, '点击"chapter_button"按钮。')
                 return
         else:
             self.log_area.show_log_area("没有符合条件的元素，准备返回首页!")
             self.logger.info("没有符合条件的元素，准备返回首页!")
             self.return_index_page()
 
- # 章节页处理
-    def chapter_page(self):
-        # 不设置刷新
-        self.element_process.get_current_url()
-        self.element_process.check_page_element(By.XPATH, "//div[@class='container title nav']", "chapter", EC.presence_of_element_located)
-        current_title = self.web.find_element(By.XPATH, "//div[@class='container title nav']//div[@class='name']").text
-        self.log_area.show_log_area(f"当前文章：{current_title}")
-        self.logger.info(f"当前文章：{current_title}")
+    def select_mode_chapter_page(self):
+        if self.start_mode == 0:
+            self.log_area.show_log_area("当前为普通模式。")
+            self.logger.info("当前为普通模式。")
+            self.chapter_page()
+        else:
+            self.log_area.show_log_area("当前为快速模式。")
+            self.logger.info("当前为快速模式。")
+            self.fast_chapter_page()
 
+    # 章节页处理（正常模式），随机时间模拟点击
+    def chapter_page(self):
+        self.check_chapter_page_element()
         max_retries = 100
         retries = 0
         while retries < max_retries:
@@ -162,11 +168,11 @@ class Pages:
                         self.web.quit()
                         self.main_window.quit()
                         sys.exit()
+                    self.web.refresh()
                     self.chapter_page()
 
         self.log_area.show_log_area("当前文章学习完成，即将进入下一篇。")
         self.logger.info("当前文章学习完成，即将进入下一篇。")
-
         try:
             next_chapter_button = self.web.find_element(By.CSS_SELECTOR, ".container a .next_chapter")
             random_second = random.randint(2, 6)
@@ -183,4 +189,57 @@ class Pages:
             self.log_area.show_log_area(f"已等待{random_second}秒。")
             self.logger.info(f"已等待{random_second}秒。")
             self.button_click(return_course_button, self.course_page, '点击"return_course_button"按钮。')
+
+    # 章节页处理（快速模式），直接通过JavaScript调用submitLearn()
+    def fast_chapter_page(self):
+        self.check_chapter_page_element()
+        max_retries = 3
+        retries = 0
+        while retries < max_retries:
+            try:
+                random_second = random.randint(2, 5)
+                time.sleep(random_second)
+                self.log_area.show_log_area(f"已等待{random_second}秒。")
+                self.logger.info(f"已等待{random_second}秒。")
+                self.web.execute_script("submitLearn();")
+                self.log_area.show_log_area("调用submitLearn成功，已更新元素。")
+                self.logger.info("调用submitLearn成功，已更新元素。")
+                self.log_area.show_log_area("当前文章学习完成，即将进入下一篇。")
+                self.logger.info("当前文章学习完成，即将进入下一篇。")
+                break
+            except Exception as e:
+                retries += 1
+                self.log_area.show_log_area(f"调用submitLearn第{retries}次失败，即将重试。")
+                self.logger.info(f"调用submitLearn第{retries}次失败，即将重试。错误信息：{e}")
+                if retries >= max_retries:
+                    self.total_retries += 1
+                    if self.total_retries <= self.max_quit_retries:
+                        self.log_area.show_log_area("服务端可能出错，重新进入文章页！")
+                        self.logger.info("服务端异常次数过多，重新进入文章页！")
+                        self.web.refresh()
+                        self.fast_chapter_page()
+                    else:
+                        self.log_area.show_log_area("服务端异常次数过多，脚本已停止！")
+                        self.logger.error("服务端异常次数过多，最大次数限制3次，脚本已停止！")
+                        msgBox = messagebox.showerror("错误", "服务端异常次数过多，脚本已停止，建议等待一段时间后再试！")
+                        self.web.quit()
+                        self.main_window.quit()
+                        sys.exit()
+
+        try:
+            next_chapter_button = self.web.find_element(By.CSS_SELECTOR, ".container a .next_chapter")
+            self.button_click(next_chapter_button, self.fast_chapter_page, '点击"next_chapter_button"按钮。')
+        except Exception as e:
+            self.log_area.show_log_area("当前为最后一篇，即将返回专题页。")
+            self.logger.info(f"当前为最后一篇，即将返回专题页。错误信息：{e}")
+            return_course_button = self.web.find_element(By.CSS_SELECTOR, ".container.title.nav button")
+            self.button_click(return_course_button, self.course_page, '点击"return_course_button"按钮。')
+
+    def check_chapter_page_element(self):
+        self.element_process.get_current_url()
+        self.element_process.check_page_element(By.XPATH, "//div[@class='container title nav']", "chapter",
+                                                EC.presence_of_element_located)
+        current_title = self.web.find_element(By.XPATH, "//div[@class='container title nav']//div[@class='name']").text
+        self.log_area.show_log_area(f"当前文章：{current_title}")
+        self.logger.info(f"当前文章：{current_title}")
 
